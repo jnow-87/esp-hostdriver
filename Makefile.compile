@@ -1,0 +1,163 @@
+#
+# Copyright (C) 2015 Jan Nowotsch
+# Author Jan Nowotsch	<jan.nowotsch@gmail.com>
+#
+# Released under the terms of the GNU GPL v2.0
+#
+
+
+
+##########################
+###   build commands   ###
+##########################
+
+# XXX naming: compile_<target type>_<dependencies type>
+# XXX $(call compile_*,<host>)
+
+define compile_c_y
+	$(echo) [YACC] $@
+	$(yacc) $(yaccflags) -v --report-file=$(basename $@).log --defines=$(basename $@).h $< -o $@
+endef
+
+define compile_c_l
+	$(echo) [LEX] $@
+	$(lex) $(lexflags) --header-file=$(basename $@).h -o $@ $<
+endef
+
+define compile_c_gperf
+	$(echo) [GPERF] $@
+	$(gperf) $(gperfflags) $< --output-file=$@
+	$(gperf_c_header) $< $@ $(basename $@).h
+endef
+
+define compile_cxx_gperf
+	$(echo) [GPERF] $@
+	$(gperf) $(gperfflags) $< --output-file=$@
+	$(gperf_cxx_header) $@ $(basename $@).h
+endef
+
+# define 'ASM' for preprocessed assembly files
+%.S.i: cppflags += -DASM
+
+define compile_i_c
+	$(echo) [$(call upper_case,$(1))CC] $@
+	$($(1)cc) $($(1)cppflags) $($(1)archflags) -E $< -o $@
+	$(if $(do_basic), \
+		$($(1)cc) $($(1)cppflags) $($(1)archflags) -MM -MF $@.d -MP -MT $@ $<
+		,
+		$($(1)cc) $($(1)cppflags) $($(1)archflags) -MM -MF $@.d.tmp -MP -MT $@ $<
+		$(fixdep) $@.d.tmp $(config_header) $(dir $(config_header))fixdep/ 1> $@.d
+	)
+endef
+
+define compile_i_cxx
+	$(echo) [$(call upper_case,$(1))CXX] $@
+	$($(1)cxx) $($(1)cppflags) $($(1)archflags) -E $< -o $@
+	$(if $(do_basic), \
+		$($(1)cxx) $($(1)cppflags) $($(1)archflags) -MM -MF $@.d -MP -MT $@ $<
+		,
+		$($(1)cxx) $($(1)cppflags) $($(1)archflags) -MM -MF $@.d.tmp -MP -MT $@ $<
+		$(fixdep) $@.d.tmp $(config_header) $(dir $(config_header))fixdep/ 1> $@.d
+	)
+endef
+
+define compile_s_c
+	$(echo) [$(call upper_case,$(1))CC] $@
+	$($(1)cc) $($(1)cppflags) $($(1)archflags) -S $< -o $@
+	$(if $(do_basic), \
+		$($(1)cc) $($(1)cppflags) $($(1)archflags) -MM -MF $@.d -MP -MT $@ $<
+		,
+		$($(1)cc) $($(1)cppflags) $($(1)archflags) -MM -MF $@.d.tmp -MP -MT $@ $<
+		$(fixdep) $@.d.tmp $(config_header) $(dir $(config_header))fixdep/ 1> $@.d
+	)
+endef
+
+define compile_s_cxx
+	$(echo) [$(call upper_case,$(1))CXX] $@
+	$($(1)cxx) $($(1)cppflags) $($(1)archflags) -S $< -o $@
+	$(if $(do_basic), \
+		$($(1)cxx) $($(1)cppflags) $($(1)archflags) -MM -MF $@.d -MP -MT $@ $<
+		,
+		$($(1)cxx) $($(1)cppflags) $($(1)archflags) -MM -MF $@.d.tmp -MP -MT $@ $<
+		$(fixdep) $@.d.tmp $(config_header) $(dir $(config_header))fixdep/ 1> $@.d
+	)
+endef
+
+define compile_o_s
+	$(echo) [$(call upper_case,$(1))AS] $@
+	$($(1)as) $($(1)asflags) $($(1)archflags) $< -o $@
+endef
+
+define compile_o_c
+	$(echo) [$(call upper_case,$(1))CC] $@
+	$($(1)cc) $($(1)cflags) $($(1)cppflags) $($(1)archflags) -c $< -o $@
+	$(if $(do_basic), \
+		$($(1)cc) $($(1)cppflags) $($(1)archflags) -MM -MF $@.d -MP -MT $@ $<
+		,
+		$($(1)cc) $($(1)cppflags) $($(1)archflags) -MM -MF $@.d.tmp -MP -MT $@ $<
+		$(fixdep) $@.d.tmp $(config_header) $(dir $(config_header))fixdep/ 1> $@.d
+	)
+endef
+
+define compile_o_cxx
+	$(echo) [$(call upper_case,$(1))CXX] $@
+	$($(1)cxx) $($(1)cxxflags) $($(1)cflags) $($(1)cppflags) $($(1)archflags) -c $< -o $@
+	$(if $(do_basic), \
+		$($(1)cxx) $($(1)cppflags) $($(1)archflags) -MM -MF $@.d -MP -MT $@ $<
+		,
+		$($(1)cxx) $($(1)cppflags) $($(1)archflags) -MM -MF $@.d.tmp -MP -MT $@ $<
+		$(fixdep) $@.d.tmp $(config_header) $(dir $(config_header))fixdep/ 1> $@.d
+	)
+endef
+
+ifeq ($(project_type),c)
+define compile_o_o
+	$(echo) [$(call upper_case,$(1))CC] $@
+	$($(1)cc) $($(1)cflags) -nostdlib -r -Wl,-r$(if $(strip $($(1)ldflags)),$(comma))$(subst $(space),$(comma),$(strip $($(1)ldflags))) $(filter %.o,$^) -o $@
+endef
+
+define compile_o_empty
+	$(echo) [$(call upper_case,$(1))CC] $@
+	$(shell [ ! -e $@.c ] && (mkdir -p $$(dirname $@); touch $@.c))
+	$($(1)cc) $($(1)cflags) $($(1)cppflags) $($(1)archflags) -c $@.c -o $@.tmp.o
+	$($(1)cc) $($(1)cflags) -nostdlib -r -Wl,-r$(if $(strip $($(1)ldflags)),$(comma))$(subst $(space),$(comma),$(strip $($(1)ldflags))) $@.tmp.o -o $@
+endef
+
+else
+
+define compile_o_o
+	$(echo) [$(call upper_case,$(1))CXX] $@
+	$($(1)cxx) $($(1)cxxflags) -nostdlib -r -Wl,-r$(if $(strip $($(1)ldflags)),$(comma))$(subst $(space),$(comma),$(strip $($(1)ldflags))) $(filter %.o,$^) -o $@
+endef
+
+define compile_o_empty
+	$(echo) [$(call upper_case,$(1))CXX] $@
+	$(shell [ ! -e $@.cc ] && (mkdir -p $$(dirname $@); touch $@.cc))
+	$($(1)cxx) $($(1)cxxflags) $($(1)cflags) $($(1)cppflags) $($(1)archflags) -c $@.cc -o $@.tmp.o
+	$($(1)cxx) $($(1)cxxflags) -nostdlib -r -Wl,-r$(if $(strip $($(1)ldflags)),$(comma))$(subst $(space),$(comma),$(strip $($(1)ldflags))) $@.tmp.o -o $@
+endef
+
+endif
+
+define compile_lib_o
+	$(echo) [$(call upper_case,$(1))AR] $@
+	$($(1)ar) crs $@ $(filter %.o,$^)
+endef
+
+ifeq ($(project_type),c)
+define compile_bin_o
+	$(echo) [$(call upper_case,$(1))CC] $@
+	$($(1)cc) $($(1)archflags) $(filter %.o,$^) -o $@ $($(1)ldlibs)
+endef
+else
+define compile_bin_o
+	$(echo) [$(call upper_case,$(1))CXX] $@
+	$($(1)cxx) $($(1)archflags) $(filter %.o,$^) -o $@ $($(1)ldlibs)
+endef
+endif
+
+define cmd_defconfig
+	$(echo) [CP] $< '->' $(config)
+	@(test -e $(config) && cp $(config) $(config).old) ; exit 0
+	$(cp) $< $(config)
+endef
