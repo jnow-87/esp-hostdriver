@@ -1,0 +1,41 @@
+#!/bin/bash
+#
+# Copyright (C) 2017 Jan Nowotsch
+# Author Jan Nowotsch	<jan.nowotsch@gmail.com>
+#
+# Released under the terms of the GNU GPL v2.0
+#
+
+
+
+# source helper
+source $(dirname $0)/util_print
+
+# source mantis issue tracker functions
+source $(dirname $0)/mantis
+
+####
+## main
+####
+
+echo -e "checking commit message for issue tracker entries"
+
+# get mantis config variables
+mantis_check_config
+
+# get commit message
+msg=$(git log -1 --format=tformat:'%s\n%b')
+
+# get issue ids from commit message
+issue_ids=$(mantis_check_commit "${msg}")
+
+# check
+if [ "${require_tag}" == "1" -a -z "${issue_ids}" ];then
+	# no issue in commit message while one is expected
+	perror "commit message does not contain an issue tracker reference"
+	perror "reverting commit"
+	git reset --soft HEAD^
+	exit 1
+fi
+
+exit 0

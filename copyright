@@ -1,0 +1,27 @@
+#!/bin/bash
+#
+# Copyright (C) 2018 Jan Nowotsch
+# Author Jan Nowotsch	<jan.nowotsch@gmail.com>
+#
+# Released under the terms of the GNU GPL v2.0
+#
+
+
+
+# \brief	check style guide for following file types:
+#				h, c, cc, cpp, cxx, l, lex, y, yacc, gperf
+#
+# \param	$1	file name
+#
+# \return	0	no violations detected
+#			1	violations detected
+function check_copyright(){
+	local file=$1
+
+	# issue grep
+	if [ "$(grep ${file} --directories=skip -e 'Copyright')" == "" ];then
+		echo -e "\e[33mWarning\e[0m: \e[35m${file}\e[0m doesn't contain a copyright claim"
+	fi
+
+	return 0
+}

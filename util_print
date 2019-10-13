@@ -1,0 +1,43 @@
+#!/bin/bash
+#
+# Copyright (C) 2017 Jan Nowotsch
+# Author Jan Nowotsch	<jan.nowotsch@gmail.com>
+#
+# Released under the terms of the GNU GPL v2.0
+#
+
+
+
+####
+## print functions
+####
+
+FG_RED="\033[31m"
+FG_GREEN="\033[32m"
+FG_YELLOW="\033[33m"
+FG_BLUE="\033[34m"
+FG_PURPLE="\033[35m"
+ATTR_RESET="\033[0m"
+
+# \brief	print msg with given foreground color
+#
+# \parma	color
+# \param	text
+function print(){
+	echo -e "$1$2${ATTR_RESET}"
+}
+
+# \brief	print ok message (green)
+function pok(){
+	print ${FG_GREEN} "$@"
+}
+
+# \brief	print error message (read)
+function perror(){
+	print ${FG_RED} "$@"
+}
+
+# \brief	print warning message (yellow)
+function pwarn(){
+	print ${FG_YELLOW} "$@"
+}
