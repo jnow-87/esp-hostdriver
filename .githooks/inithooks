@@ -1,0 +1,59 @@
+#!/bin/bash
+#
+# Copyright (C) 2016 Jan Nowotsch
+# Author Jan Nowotsch	<jan.nowotsch@gmail.com>
+#
+# Released under the terms of the GNU GPL v2.0
+#
+
+
+
+function create(){
+	for dir in $(\ls)
+	do
+		[ ! -d ${dir} ] && continue
+
+		echo "updating ${dir}"
+		ln -frs .githooks/style ${dir}/hooks/style
+		ln -frs .githooks/update ${dir}/hooks/update
+		ln -frs .githooks/util_print ${dir}/hooks/util_print
+		ln -frs .githooks/mantis ${dir}/hooks/mantis
+	done
+}
+
+function check(){
+	g_failed=0
+
+	for dir in $(\ls)
+	do
+		[ ! -d ${dir} ] && continue
+
+		failed=0
+		test -e ${dir}/hooks/style || failed=1
+		test -e ${dir}/hooks/update || failed=1
+		test -e ${dir}/hooks/util_print || failed=1
+		test -e ${dir}/hooks/mantis || failed=1
+
+		if [ ${failed} -eq 0 ];then
+			echo -e "${dir} \033[32mok\033[0m"
+		else
+			echo -e "${dir} \033[31mmissing\033[0m"
+		fi
+
+		let g_failed+=${failed}
+	done
+
+	echo -e "\n\033[35m[summary]\033[0m"
+	if [ ${g_failed} -eq 0 ];then
+		echo -e "\thooks are missing within \033[32m${g_failed}\033[0m directories"
+	else
+		echo -e "\thooks are missing within \033[31m${g_failed}\033[0m directories"
+	fi
+}
+
+if [ "$1" == "--check" ];then
+	check
+else
+	create
+fi
+

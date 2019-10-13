@@ -1,0 +1,176 @@
+#!/bin/bash
+#
+# Copyright (C) 2017 Jan Nowotsch
+# Author Jan Nowotsch	<jan.nowotsch@gmail.com>
+#
+# Released under the terms of the GNU GPL v2.0
+#
+
+
+
+source $(dirname $0)/util_print
+
+
+####
+## helper functions
+####
+
+# \brief	execute the given sql-command string
+#
+# \param	query	sql query
+#
+# \pre		db is set to the desired database
+# \pre		dbuser is set to a valid database user
+# \pre		dbpw is set to the given user's password
+function db_query(){
+	mysql --batch --skip-column-names --user=${dbuser} --password=${dbpw} --execute "$1"  ${db}
+}
+
+
+####
+## main
+####
+
+# \brief	check if the given issue ids are present in the mantis database
+#
+# \param	...				space separated list of issue ids
+#
+# \return	0				some id is missing or is not configured to use the custom field
+#			else			custom field id
+function mantis_check_db(){
+	local issue_ids field_id proj proj_ids proj_id
+
+	issue_ids=$@
+
+	# check mysql
+	if [ -z "$(which mysql)" ];then
+		perror "mysql not executable"
+		return 0
+	fi
+
+	# check database connection
+	db_query "show tables" > /dev/null
+
+	if [ ! 0 -eq $? ];then
+		perror "invalid mantis database or credentials"
+		return 0
+	fi
+
+	# check if the desired custom field is available
+	field_id=$(db_query "select id from mantis_custom_field_table where name=\"${dbfield}\"")
+
+	if [ -z "${field_id}" ];then
+		perror "custom field \"${dbfield}\" not found in database"
+		return 0
+	fi
+
+	# get project ids for projects that use the custom field
+	proj_ids=$(db_query "select project_id from mantis_custom_field_project_table where field_id=${field_id}")
+
+	# check if the custom field is configured to store longtext
+	if [ ! 10 -eq $(db_query "select type from mantis_custom_field_table where id=${field_id}") ];then
+		perror "custom field is not of type \"textarea\""
+		return 0
+	fi
+
+	# check if all issue ids are valid and the given custom field is available for all issues
+	for issue_id in $(echo ${issue_ids})
+	do
+		proj_id=$(db_query "select project_id from mantis_bug_table where id=${issue_id}")
+
+		# check if a project id has been found
+		if [ -z "${proj_id}" ];then
+			perror "issue id ${issue_id} not found in database"
+			return 0
+		fi
+
+		# check if the project is within the list of the projects that use the custom field
+		if [ -z "$(echo ${proj_ids} | grep -w ${proj_id})" ];then
+			proj=$(db_query "select name from mantis_project_table where id=${proj_id}")
+			perror "mantis project \"${proj}\" is not configured to use custom field \"${dbfield}\""
+			return 0
+		fi
+	done
+
+	return ${field_id}
+}
+
+# \brief	initialise and check if all required mantis git-config variables are present
+#
+# \post		the following global variables are initialised
+#				require_tag		each commit message is required to contain an issue reference
+#				db				mantis database name
+#				dbuser			mantis database user
+#				dbpw			mantis database password for dbuser
+#				dbfield			mantis custom field that shall be updated
+#
+# \return	0	mantis not configured
+#			1	mantis configured
+function mantis_check_config(){
+	require_tag=$(git config mantis.required); [ $? -eq 0 ] || return 1
+	db=$(git config mantis.db); [ $? -eq 0 ] || return 1
+	dbuser=$(git config mantis.dbuser); [ $? -eq 0 ] || return 1
+	dbpw=$(git config mantis.dbpassword); [ $? -eq 0 ] || return 1
+	dbfield=$(git config mantis.dbfield); [ $? -eq 0 ] || return 1
+
+	return 0
+}
+
+# \brief	check if the commit message contains an issue tag
+#			returning detected issue ids
+#
+# \param	...		commit message
+#
+# \return	list of issue ids
+function mantis_check_commit(){
+	local line
+
+	for line in $(echo $@ | grep -o 'issue: [0-9,;\t ]\+')
+	do
+		echo $line | grep -o '[0-9]\+'
+	done | sed 's/ /\n/g' | sort -u
+}
+
+# \brief	update mantis issues based on given commit message
+#
+# \parma	msg		commit message
+# \param	data	data to update the database with
+# \param	issues	space separated list of issue ids
+#
+# \return	0		success
+#			1		error
+function mantis_update_db(){
+	local ret_val msg data issue_ids issue_id field_id
+
+	msg=$1
+	data=$2
+	issue_ids=$3
+	ret_val=0
+
+	# check if all data match the database configuration
+	mantis_check_db ${issue_ids}; [ $? -eq 0 ] && return 1
+	field_id=$?
+
+	# update all issues
+	for issue_id in ${issue_ids}
+	do
+		echo -n "updating issue ${issue_id} "
+
+		text=$(db_query "select text from mantis_custom_field_string_table where field_id=${field_id} and bug_id=${issue_id}" | grep "${data}")
+
+		if [ -n "${text}" ];then
+			pok "already up to date"
+		else
+			db_query "update mantis_custom_field_string_table set text=concat(text, \"${data}\n\") where field_id=${field_id} and bug_id=${issue_id}"
+
+			if [ ! $? -eq 0 ];then
+				perror "failed"
+				ret_val=1
+			else
+				pok "done"
+			fi
+		fi
+	done
+
+	return ${ret_val}
+}

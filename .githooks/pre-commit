@@ -1,0 +1,49 @@
+#!/bin/bash
+#
+# Copyright (C) 2016 Jan Nowotsch
+# Author Jan Nowotsch	<jan.nowotsch@gmail.com>
+#
+# Released under the terms of the GNU GPL v2.0
+#
+# \brief	pre-commit git hook script
+#			if invoken without parameter staged files are check against coding style violations
+#			otherwise the supplied files are checked
+# \param	... files to be checked for coding style violations
+#
+
+
+
+# source helper
+source $(dirname $0)/util_print
+
+# source style checker
+source $(dirname $0)/style
+
+# source copyright checker
+source $(dirname $0)/copyright
+
+# init
+have_violation=0
+
+
+# get list of files staged
+if [ $# -ge 1 ];then
+	files=$@
+else
+	files=$(git diff --cached --name-only)
+fi
+
+# iterate through files
+for file in ${files}
+do
+	# check style guide
+	if ! check_style_guide ${file} "cat ${file}"
+	then
+		have_violation=1
+	fi
+
+	# check copyright claim
+	check_copyright ${file}
+done
+
+exit ${have_violation}

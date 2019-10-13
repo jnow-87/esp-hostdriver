@@ -1,0 +1,88 @@
+#!/bin/bash
+#
+# Copyright (C) 2016 Jan Nowotsch
+# Author Jan Nowotsch	<jan.nowotsch@gmail.com>
+#
+# Released under the terms of the GNU GPL v2.0
+#
+
+
+
+# sed regex patterns to exclude from search
+style_ignore=(
+	# strings
+	"-e 's/\"[^\"]*\"/\"\"/g'"
+
+	# c single-line comments
+	"-e 's://.*://:g'"
+
+	# c multi-line comments
+	"-e 's:/\*.*\*/:/**/:g'"
+)
+
+# grep regex patterns, checking for style guide violations
+style_violations=(
+	# trailing whitespace
+	" -e '\s+$'"
+	
+	# pointer: type* id
+	" -e '\w\*+\s+'"
+
+	# pointer: type**id
+	" -e '\w\*+\w'"
+
+	# pointer: type ( *fct_p)
+	" -e '\(\s+\*'"
+)
+
+
+# \brief	check style guide for following file types:
+#				h, c, cc, cpp, cxx, l, lex, y, yacc, gperf
+#
+# \param	$1	file name
+# \param	$2	command how to acquire the file content
+# \param	$3	optional, file for grep output redirection
+#
+# \return	0	no violations detected
+#			1	violations detected
+function check_style_guide(){
+	local file=$1
+	local content=$2
+	local log=""
+
+	# check file type
+	local suffix=$(echo ${file} | rev | cut -d '.' -f 1 | rev)
+	
+	if [ "${suffix}" != "h" \
+	  -a "${suffix}" != "c" \
+	  -a "${suffix}" != "cc" \
+	  -a "${suffix}" != "cpp" \
+	  -a "${suffix}" != "cxx" \
+	  -a "${suffix}" != "l" \
+	  -a "${suffix}" != "lex" \
+	  -a "${suffix}" != "y" \
+	  -a "${suffix}" != "yacc" \
+	  -a "${suffix}" != "gperf" \
+	  ];then
+	  	return 0
+	fi
+
+	# check for output redirection
+	if [ "$3" != "" ];then
+		local log=" > $3"
+	fi
+
+	# issue grep
+	eval ${content} "|" \
+		 "sed " ${style_ignore[*]} "|" \
+		 "GREP_COLOR='2;30;41' grep -nHE --color --label="${file} \
+		 ${style_violations[*]} \
+		 ${log}
+
+	# check result
+	if [ $? == 0 ];then
+		return 1
+	fi
+
+	return 0
+}
