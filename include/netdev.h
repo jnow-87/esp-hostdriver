@@ -5,7 +5,6 @@
 #include <stddef.h>
 #include <types.h>
 #include <net.h>
-#include <inet.h>
 
 
 /* incomplete types */
@@ -13,32 +12,8 @@ struct netdev_t;
 
 
 /* types */
-typedef enum{
-	NETDEV_AP = 0x1,
-	NETDEV_CLIENT = 0x2,
-} netdev_mode_t;
-
-typedef enum{
-	ENC_OPEN = 0,
-	ENC_WPA_PSK,
-	ENC_WPA2_PSK,
-	ENC_WPA_WPA2_PSK,
-} netdev_enc_mode_t;
-
 typedef struct{
-	char *hostname;
-
-	bool dhcp;
-	inet_addr_t ip,
-				gw,
-				netmask;
-
-	netdev_enc_mode_t enc;
-	char *password;
-} netdev_cfg_t;
-
-typedef struct{
-	int (*configure)(struct netdev_t *dev, netdev_cfg_t *cfg);
+	int (*configure)(struct netdev_t *dev, void *cfg);
 
 	int (*connect)(struct netdev_t *dev, sock_addr_t *addr);
 	int (*listen)(struct netdev_t *dev, int backlog);
@@ -53,18 +28,21 @@ typedef struct netdev_t{
 	struct netdev_t *prev,
 					*next;
 
-	netdev_ops_t ops;
-	netdev_cfg_t cfg;
+	net_family_t domain;
 
+	netdev_ops_t ops;
 	void *data;
+	uint8_t cfg[];
 } netdev_t;
 
 
 /* prototypes */
 int netdev_init(void);
 
-netdev_t *netdev_register(netdev_ops_t *ops, void *data);
+netdev_t *netdev_register(netdev_ops_t *ops, net_family_t domain, void *data);
 int netdev_release(netdev_t *dev);
+
+int bos_net_configure(void *cfg, size_t cfg_size);
 
 int bos_socket(net_family_t domain, sock_type_t type);
 int bos_connect(int fd, sock_addr_t *addr, size_t addr_len);
