@@ -20,8 +20,8 @@ typedef struct{
 	int (*accept)(struct netdev_t *dev, sock_addr_t *addr);
 	int (*close)(struct netdev_t *dev);
 
-	int (*send)(struct netdev_t *dev, void *data, size_t data_len, sock_addr_t *addr);
-	int (*recv)(struct netdev_t *dev, void *data, size_t data_len, sock_addr_t *addr);
+	ssize_t (*send)(struct netdev_t *dev, void *data, size_t data_len, sock_addr_t *addr);
+	ssize_t (*recv)(struct netdev_t *dev, void *data, size_t data_len, sock_addr_t *addr);
 } netdev_ops_t;
 
 typedef struct netdev_t{
@@ -49,11 +49,13 @@ int bos_connect(int fd, sock_addr_t *addr, size_t addr_len);
 int bos_bind(int fd, sock_addr_t *addr, size_t addr_len);
 int bos_listen(int fd, int backlog);
 int bos_accept(int fd, sock_addr_t *addr, size_t *addr_len);
-int bos_send(int fd, void *data, size_t data_len);
-int bos_sendto(int fd, void *data, size_t data_len, sock_addr_t *addr, size_t addr_len);
-int bos_recv(int fd, void *data, size_t data_len);
-int bos_recvfrom(int fd, void *data, size_t data_len, sock_addr_t *addr, size_t *addr_len);
+ssize_t bos_send(int fd, void *data, size_t data_len);
+ssize_t bos_sendto(int fd, void *data, size_t data_len, sock_addr_t *addr, size_t addr_len);
+ssize_t bos_recv(int fd, void *data, size_t data_len);
+ssize_t bos_recvfrom(int fd, void *data, size_t data_len, sock_addr_t *addr, size_t *addr_len);
 int bos_ioctl(int fd, int cmd, void *data, size_t data_len);
+
+int bos_close(int fd);
 
 
 #endif // NETDEV_H

@@ -1,1 +1,1 @@
-obj-y := list1.o list2.o
+obj-y := list1.o list2.o ringbuf.o

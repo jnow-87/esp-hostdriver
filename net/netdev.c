@@ -149,16 +149,21 @@ int bos_connect(int fd_id, sock_addr_t *addr, size_t addr_len){
 	r = -1;
 
 	fd = fs_fd_acquire(fd_id);
+
+	if(fd == 0x0)
+		return -1;
+
 	sock = fd->node->data;
-	dev = sock->dev;
 
 	if(sock->domain != addr->domain)
 		goto end;
 
-	if(dev == 0x0){
+	if(sock->dev == 0x0){
 		if(assign_netdev(sock, addr, addr_len) != 0)
 			goto end;
 	}
+
+	dev = sock->dev;
 
 	if(dev->ops.connect)
 		r = dev->ops.connect(dev, addr);
@@ -244,11 +249,11 @@ end:
 	return r;
 }
 
-int bos_send(int fd_id, void *data, size_t data_len){
+ssize_t bos_send(int fd_id, void *data, size_t data_len){
 	return bos_sendto(fd_id, data, data_len, 0x0, 0);
 }
 
-int bos_sendto(int fd_id, void *data, size_t data_len, sock_addr_t *addr, size_t addr_len){
+ssize_t bos_sendto(int fd_id, void *data, size_t data_len, sock_addr_t *addr, size_t addr_len){
 	int r;
 	fs_filed_t *fd;
 	socket_t *sock;
@@ -276,11 +281,11 @@ end:
 	return r;
 }
 
-int bos_recv(int fd_id, void *data, size_t data_len){
+ssize_t bos_recv(int fd_id, void *data, size_t data_len){
 	return bos_recvfrom(fd_id, data, data_len, 0x0, 0);
 }
 
-int bos_recvfrom(int fd_id, void *data, size_t data_len, sock_addr_t *addr, size_t *addr_len){
+ssize_t bos_recvfrom(int fd_id, void *data, size_t data_len, sock_addr_t *addr, size_t *addr_len){
 	int r;
 	fs_filed_t *fd;
 	socket_t *sock;
@@ -306,6 +311,29 @@ end:
 	fs_fd_release(fd);
 
 	return r;
+}
+
+int bos_close(int fd_id){
+	fs_filed_t *fd;
+	socket_t *sock;
+	netdev_t *dev;
+
+
+	fd = fs_fd_acquire(fd_id);
+
+	if(fd == 0x0)
+		return -1;
+
+	sock = fd->node->data;
+	dev = sock->dev;
+
+	if(dev == 0x0)
+		return -1;
+
+	if(dev->ops.close)
+		return dev->ops.close(dev);
+
+	return -1;
 }
 
 

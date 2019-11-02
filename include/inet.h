@@ -36,7 +36,8 @@ typedef struct{
 typedef struct{
 	inet_dev_mode_t mode;
 
-	char *hostname;
+	char *ssid,
+		 *hostname;
 
 	bool dhcp;
 	inet_addr_t ip,
