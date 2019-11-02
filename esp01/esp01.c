@@ -9,13 +9,13 @@
 /* local/static prototypes */
 static int configure(struct netdev_t *dev, void *cfg);
 
-static int connect(struct netdev_t *dev, sock_addr_t *addr);
+static int connect(struct netdev_t *dev, socket_t *sock);
 static int listen(struct netdev_t *dev, int backlog);
-static int accept(struct netdev_t *dev, sock_addr_t *addr);
+static int accept(struct netdev_t *dev, socket_t *sock);
 static int close(struct netdev_t *dev);
 
-static ssize_t send(struct netdev_t *dev, void *data, size_t data_len, sock_addr_t *addr);
-static ssize_t recv(struct netdev_t *dev, void *data, size_t data_len, sock_addr_t *addr);
+static ssize_t send(struct netdev_t *dev, void *data, size_t data_len, socket_t *sock);
+static ssize_t recv(struct netdev_t *dev, void *data, size_t data_len, socket_t *sock);
 
 static int send_cmd(serial_t *esp, char const *resp, char const *fmt, ...);
 
@@ -103,17 +103,17 @@ static int configure(struct netdev_t *dev, void *_cfg){
 	return r;
 }
 
-static int connect(struct netdev_t *dev, sock_addr_t *addr){
+static int connect(struct netdev_t *dev, socket_t *sock){
 	serial_t *esp;
 	inet_data_t *remote;
 	char port[16];
 
 
 	esp = (serial_t*)dev->data;
-	remote = &((sock_addr_inet_t*)addr)->data;
+	remote = &((sock_addr_inet_t*)(&sock->addr))->data;
 
 	snprintf(port, 16, "%d", remote->port);
-	return send_cmd(esp, 0x0, "AT+CIPSTART=0,\"%s\",\"%a\",%s", (remote->type == SOCK_DGRAM ? "UDP" : "TCP"), &remote->addr, port);
+	return send_cmd(esp, 0x0, "AT+CIPSTART=0,\"%s\",\"%a\",%s", (sock->type == SOCK_DGRAM ? "UDP" : "TCP"), &remote->addr, port);
 }
 
 static int listen(struct netdev_t *dev, int backlog){
@@ -121,7 +121,7 @@ static int listen(struct netdev_t *dev, int backlog){
 	return 0;
 }
 
-static int accept(struct netdev_t *dev, sock_addr_t *addr){
+static int accept(struct netdev_t *dev, socket_t *sock){
 	// TODO
 	return 0;
 }
@@ -134,7 +134,7 @@ static int close(struct netdev_t *dev){
 	return send_cmd(esp, 0x0, "AT+CIPCLOSE=0");
 }
 
-static ssize_t send(struct netdev_t *dev, void *data, size_t data_len, sock_addr_t *addr){
+static ssize_t send(struct netdev_t *dev, void *data, size_t data_len, socket_t *sock){
 	int r;
 	char len[6],
 		 port[16];
@@ -146,13 +146,13 @@ static ssize_t send(struct netdev_t *dev, void *data, size_t data_len, sock_addr
 		return 0;
 
 	esp = (serial_t*)dev->data;
-	remote = &((sock_addr_inet_t*)addr)->data;
+	remote = &((sock_addr_inet_t*)(&sock->addr))->data;
 
 	snprintf(len, 6, "%d", data_len);
 
 	r = 0;
 
-	if(addr){
+	if(sock->type == SOCK_DGRAM){
 		snprintf(port, 16, "%d", remote->port);
 		r |= send_cmd(esp, 0x0, "AT+CIPSEND=0,%s,\"%a\",%s", len, &remote->addr, port);
 	}
@@ -169,7 +169,7 @@ static ssize_t send(struct netdev_t *dev, void *data, size_t data_len, sock_addr
 	return (r == 0 ? data_len : -1);
 }
 
-static ssize_t recv(struct netdev_t *dev, void *data, size_t data_len, sock_addr_t *addr){
+static ssize_t recv(struct netdev_t *dev, void *data, size_t data_len, socket_t *sock){
 	return serial_read((serial_t*)dev->data, data, data_len);
 }
 

@@ -10,6 +10,7 @@
  * TODO
  * 	handle changing target for sendto, recvfrom
  * 	handle esp commands that return something different than OK, ERROR, busy, such as AT+RST
+ * 	recvfrom has to update the addr variable with the source information
  */
 
 /* types */
@@ -20,13 +21,6 @@ typedef struct{
 	int (*match_addr)(netdev_t *dev, sock_addr_t *addr, size_t addr_len);
 } domain_cfg_t;
 
-typedef struct{
-	net_family_t domain;
-	sock_type_t type;
-
-	netdev_t *dev;
-} socket_t;
-
 
 /* local/static prototypes */
 static int open(struct fs_node_t *start, char const *path, f_mode_t mode, struct process_t *this_p);
@@ -34,6 +28,7 @@ static int close(struct fs_filed_t *fd, struct process_t *this_p);
 static size_t read(struct fs_filed_t *fd, void *buf, size_t n);
 static size_t write(struct fs_filed_t *fd, void *buf, size_t n);
 
+ssize_t send_recv(int fd_id, void *data, size_t data_len, sock_addr_t *addr, size_t addr_len, int op_offset);
 static int assign_netdev(socket_t *sock, sock_addr_t *addr, size_t addr_len);
 
 static char *itoa(int v, unsigned int base, char *s, size_t len);
@@ -127,10 +122,10 @@ int bos_socket(net_family_t domain, sock_type_t type){
 
 	itoa(id, 10, name, 8);
 
-	sock = malloc(sizeof(socket_t));
+	sock = malloc(sizeof(socket_t) + domain_cfg[domain].addr_len);
 
-	sock->domain = domain;
 	sock->type = type;
+	sock->addr.domain = domain;
 	sock->dev = 0x0;
 
 	node = fs_node_create(net_root, name, strlen(name), FT_REG, sock, netfs_id);
@@ -155,18 +150,16 @@ int bos_connect(int fd_id, sock_addr_t *addr, size_t addr_len){
 
 	sock = fd->node->data;
 
-	if(sock->domain != addr->domain)
-		goto end;
+	if(sock->dev != 0x0)
+		return -1;	// E_CONN
 
-	if(sock->dev == 0x0){
-		if(assign_netdev(sock, addr, addr_len) != 0)
-			goto end;
-	}
+	if(assign_netdev(sock, addr, addr_len) != 0)
+		goto end;
 
 	dev = sock->dev;
 
 	if(dev->ops.connect)
-		r = dev->ops.connect(dev, addr);
+		r = dev->ops.connect(dev, sock);
 
 end:
 	fs_fd_release(fd);
@@ -184,9 +177,6 @@ int bos_bind(int fd_id, sock_addr_t *addr, size_t addr_len){
 
 	fd = fs_fd_acquire(fd_id);
 	sock = fd->node->data;
-
-	if(sock->domain != addr->domain)
-		goto end;
 
 	r = assign_netdev(sock, addr, addr_len);
 
@@ -237,11 +227,11 @@ int bos_accept(int fd_id, sock_addr_t *addr, size_t *addr_len){
 	if(dev == 0x0)
 		goto end;
 
-	if(*addr_len != domain_cfg[sock->domain].addr_len)
+	if(*addr_len != domain_cfg[sock->addr.domain].addr_len)
 		goto end;
 
 	if(dev->ops.accept)
-		r = dev->ops.accept(dev, addr);
+		r = dev->ops.accept(dev, sock);
 
 end:
 	fs_fd_release(fd);
@@ -250,67 +240,19 @@ end:
 }
 
 ssize_t bos_send(int fd_id, void *data, size_t data_len){
-	return bos_sendto(fd_id, data, data_len, 0x0, 0);
+	return send_recv(fd_id, data, data_len, 0x0, 0, offsetof(netdev_ops_t, send));
 }
 
 ssize_t bos_sendto(int fd_id, void *data, size_t data_len, sock_addr_t *addr, size_t addr_len){
-	int r;
-	fs_filed_t *fd;
-	socket_t *sock;
-	netdev_t *dev;
-
-
-	r = -1;
-
-	fd = fs_fd_acquire(fd_id);
-	sock = fd->node->data;
-	dev = sock->dev;
-
-	if(dev == 0x0)
-		goto end;
-
-	if(addr && addr_len != domain_cfg[sock->domain].addr_len)
-		goto end;
-
-	if(dev->ops.send)
-		r = dev->ops.send(dev, data, data_len, addr);
-
-end:
-	fs_fd_release(fd);
-
-	return r;
+	return send_recv(fd_id, data, data_len, addr, addr_len, offsetof(netdev_ops_t, send));
 }
 
 ssize_t bos_recv(int fd_id, void *data, size_t data_len){
-	return bos_recvfrom(fd_id, data, data_len, 0x0, 0);
+	return send_recv(fd_id, data, data_len, 0x0, 0, offsetof(netdev_ops_t, recv));
 }
 
 ssize_t bos_recvfrom(int fd_id, void *data, size_t data_len, sock_addr_t *addr, size_t *addr_len){
-	int r;
-	fs_filed_t *fd;
-	socket_t *sock;
-	netdev_t *dev;
-
-
-	r = -1;
-
-	fd = fs_fd_acquire(fd_id);
-	sock = fd->node->data;
-	dev = sock->dev;
-
-	if(dev == 0x0)
-		goto end;
-
-	if(addr && *addr_len != domain_cfg[sock->domain].addr_len)
-		goto end;
-
-	if(dev->ops.recv)
-		r = dev->ops.recv(dev, data, data_len, addr);
-
-end:
-	fs_fd_release(fd);
-
-	return r;
+	return send_recv(fd_id, data, data_len, addr, *addr_len, offsetof(netdev_ops_t, recv));
 }
 
 int bos_close(int fd_id){
@@ -348,10 +290,14 @@ static int close(struct fs_filed_t *fd, struct process_t *this_p){
 
 	sock = fd->node->data;
 
-	if(sock)
+	if(sock && sock->dev)
 		sock->dev->ops.close(sock->dev);
 
 	fs_fd_free(fd);
+
+	if(fd->node->ref_cnt == 0)
+		fs_node_destroy(fd->node);
+
 	return 0;
 }
 
@@ -363,19 +309,67 @@ static size_t write(struct fs_filed_t *fd, void *buf, size_t n){
 	return bos_send(fd->id, buf, n);
 }
 
+ssize_t send_recv(int fd_id, void *data, size_t data_len, sock_addr_t *addr, size_t addr_len, int op_offset){
+	int r;
+	fs_filed_t *fd;
+	socket_t *sock;
+	netdev_t *dev;
+	ssize_t (*op)(netdev_t*, void*, size_t, socket_t*);
+
+
+	r = -1;
+
+	fd = fs_fd_acquire(fd_id);
+	sock = fd->node->data;
+	dev = sock->dev;
+
+	if(sock->type == SOCK_STREAM){
+		if(dev == 0x0)
+			goto end;	// E_NOCONN
+
+		if(addr != 0x0)
+			goto end;	// E_CONN
+	}
+	else{
+		if(addr){
+			if(addr_len != domain_cfg[sock->addr.domain].addr_len)
+				goto end;
+
+			if(assign_netdev(sock, addr, addr_len) != 0)
+				goto end;
+		}
+		else if(dev == 0x0)
+			goto end; // E_NOCONN
+
+		dev = sock->dev;
+	}
+
+	memcpy(&op, (char*)(&dev->ops) + op_offset, sizeof(op));
+
+	if(*op)
+		r = op(dev, data, data_len, sock);
+
+end:
+	fs_fd_release(fd);
+
+	return r;
+}
+
 static int assign_netdev(socket_t *sock, sock_addr_t *addr, size_t addr_len){
 	netdev_t *dev;
 
 
-	if(addr_len != domain_cfg[sock->domain].addr_len)
+	if(addr_len != domain_cfg[sock->addr.domain].addr_len)
 		return -1;
 
 	list_for_each(dev_lst, dev){
-		if(dev->domain != sock->domain)
+		if(dev->domain != addr->domain)
 			continue;
 
-		if(domain_cfg[sock->domain].match_addr(dev, addr, addr_len)){
+		if(domain_cfg[addr->domain].match_addr(dev, addr, addr_len)){
 			sock->dev = dev;
+			memcpy(&sock->addr, addr, addr_len);
+
 			return 0;
 		}
 	}

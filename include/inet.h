@@ -22,8 +22,6 @@ typedef enum{
 } inet_enc_t;
 
 typedef struct{
-	sock_type_t type;
-
 	inet_addr_t addr;
 	uint16_t port;
 } inet_data_t;

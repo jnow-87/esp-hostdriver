@@ -13,15 +13,22 @@ struct netdev_t;
 
 /* types */
 typedef struct{
+	struct netdev_t *dev;
+
+	sock_type_t type;
+	sock_addr_t addr;
+} socket_t;
+
+typedef struct{
 	int (*configure)(struct netdev_t *dev, void *cfg);
 
-	int (*connect)(struct netdev_t *dev, sock_addr_t *addr);
+	int (*connect)(struct netdev_t *dev, socket_t *sock);
 	int (*listen)(struct netdev_t *dev, int backlog);
-	int (*accept)(struct netdev_t *dev, sock_addr_t *addr);
+	int (*accept)(struct netdev_t *dev, socket_t *sock);
 	int (*close)(struct netdev_t *dev);
 
-	ssize_t (*send)(struct netdev_t *dev, void *data, size_t data_len, sock_addr_t *addr);
-	ssize_t (*recv)(struct netdev_t *dev, void *data, size_t data_len, sock_addr_t *addr);
+	ssize_t (*send)(struct netdev_t *dev, void *data, size_t data_len, socket_t *sock);
+	ssize_t (*recv)(struct netdev_t *dev, void *data, size_t data_len, socket_t *sock);
 } netdev_ops_t;
 
 typedef struct netdev_t{
