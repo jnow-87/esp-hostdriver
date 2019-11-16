@@ -6,12 +6,16 @@
 #include <netdev.h>
 
 
+/* macros */
+#define INET_ADDR_ANY	0
+
+
 /* types */
 typedef uint32_t inet_addr_t;
 
 typedef enum{
-	INET_AP = 0x1,
-	INET_CLIENT = 0x2,
+	INET_AP = 1,
+	INET_CLIENT,
 } inet_dev_mode_t;
 
 typedef enum{
@@ -20,16 +24,6 @@ typedef enum{
 	ENC_WPA2_PSK,
 	ENC_WPA_WPA2_PSK,
 } inet_enc_t;
-
-typedef struct{
-	inet_addr_t addr;
-	uint16_t port;
-} inet_data_t;
-
-typedef struct{
-	net_family_t domain;
-	inet_data_t data;
-} sock_addr_inet_t;
 
 typedef struct{
 	inet_dev_mode_t mode;
@@ -45,6 +39,16 @@ typedef struct{
 	inet_enc_t enc;
 	char *password;
 } inet_dev_cfg_t;
+
+typedef struct{
+	inet_addr_t addr;
+	uint16_t port;
+} inet_data_t;
+
+typedef struct{
+	net_family_t domain;
+	inet_data_t data;
+} sock_addr_inet_t;
 
 
 /* prototypes */

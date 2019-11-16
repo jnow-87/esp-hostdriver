@@ -14,15 +14,17 @@ typedef struct{
 
 	pthread_t read_thread_tid;
 
-	ringbuf_t rx_buf;
+	void (*recv)(netdev_t *dev, int link_id, void *data, size_t len, sock_addr_inet_t *remote);
+	void (*accept)(netdev_t *dev, int link_id, sock_addr_inet_t *remote);
+	void (*closed)(netdev_t *dev, int link_id);
+
+	netdev_t *dev;
 } serial_t;
 
 
 /* global functions */
 serial_t *serial_init(char const *path);
 void serial_close(serial_t *dev);
-
-size_t serial_read(serial_t *dev, void *data, size_t n);
 
 void serial_cmd_start(serial_t *dev, char const *resp);
 void serial_cmd_send(serial_t *dev, char const *s);

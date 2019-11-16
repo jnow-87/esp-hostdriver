@@ -5,6 +5,7 @@
 #include <stddef.h>
 #include <types.h>
 #include <net.h>
+#include <sys/ringbuf.h>
 
 
 /* incomplete types */
@@ -12,23 +13,43 @@ struct netdev_t;
 
 
 /* types */
-typedef struct{
+typedef struct datagram_t{
+	struct datagram_t *prev,
+					  *next;
+
+	size_t len,
+		   idx;
+	uint8_t *data;
+
+	sock_addr_t addr;		// NOTE addr has to be the last member of this
+							// struct since it has a flexible array member
+} datagram_t;
+
+typedef struct socket_t{
+	struct socket_t *prev,
+					*next;
+
 	struct netdev_t *dev;
 
+	ringbuf_t stream;
+	datagram_t *dgrams;
+
+	// TODO add mutex
+	struct socket_t *clients;
+
 	sock_type_t type;
-	sock_addr_t addr;
+	sock_addr_t addr;		// NOTE addr has to be the last member of this
+							// struct since it has a flexible array member
 } socket_t;
 
 typedef struct{
 	int (*configure)(struct netdev_t *dev, void *cfg);
 
-	int (*connect)(struct netdev_t *dev, socket_t *sock);
-	int (*listen)(struct netdev_t *dev, int backlog);
-	int (*accept)(struct netdev_t *dev, socket_t *sock);
-	int (*close)(struct netdev_t *dev);
+	int (*connect)(socket_t *sock);
+	int (*listen)(socket_t *sock, int backlog);
+	int (*close)(socket_t *sock);
 
-	ssize_t (*send)(struct netdev_t *dev, void *data, size_t data_len, socket_t *sock);
-	ssize_t (*recv)(struct netdev_t *dev, void *data, size_t data_len, socket_t *sock);
+	ssize_t (*send)(socket_t *sock, void *data, size_t data_len);
 } netdev_ops_t;
 
 typedef struct netdev_t{
@@ -48,6 +69,10 @@ int netdev_init(void);
 
 netdev_t *netdev_register(netdev_ops_t *ops, net_family_t domain, void *data);
 int netdev_release(netdev_t *dev);
+
+socket_t *netdev_sock_alloc(sock_type_t type, size_t addr_len);
+void netdev_sock_free(socket_t *sock);
+void netdev_sock_disconnect(socket_t *sock);
 
 int bos_net_configure(void *cfg, size_t cfg_size);
 

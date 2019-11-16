@@ -23,8 +23,10 @@ typedef enum{
 
 /* local/static prototypes */
 static void *read_thread(void *arg);
-static void parse_line(char const *line);
-static void recv(serial_t *dev, size_t n);
+static void parse_line(serial_t *dev, char *line, size_t len);
+static void recv(serial_t *dev, char *line, size_t len);
+static void accept(serial_t *dev, char *line, size_t len);
+static void closed(serial_t *dev, char *line, size_t len);
 
 
 /* static variables */
@@ -39,7 +41,6 @@ static char const *response = 0x0;
 serial_t *serial_init(char const *path){
 	serial_t *dev;
 	struct termios attr;
-	void *rx_data;
 
 
 	dev = malloc(sizeof(serial_t));
@@ -51,13 +52,6 @@ serial_t *serial_init(char const *path){
 
 	if(dev->fd == -1)
 		goto err_0;
-
-	rx_data = malloc(32);
-
-	if(rx_data == 0x0)
-		goto err_1;
-
-	ringbuf_init(&dev->rx_buf, rx_data, 32);
 
 	if(tcgetattr(dev->fd, &dev->term_attr) != 0)
 		goto err_2;
@@ -74,19 +68,16 @@ serial_t *serial_init(char const *path){
 	cfsetspeed(&attr, B115200);
 
 	if(tcsetattr(dev->fd, TCSANOW, &attr) != 0)
-		goto err_3;
+		goto err_2;
 
 	if(pthread_create(&dev->read_thread_tid, 0, read_thread, dev) != 0)
-		goto err_3;
+		goto err_2;
 
 	return dev;
 
 
-err_3:
-	tcsetattr(dev->fd, TCSANOW, &dev->term_attr);
-
 err_2:
-	free(rx_data);
+	tcsetattr(dev->fd, TCSANOW, &dev->term_attr);
 
 err_1:
 	close(dev->fd);
@@ -100,10 +91,6 @@ void serial_close(serial_t *dev){
 	pthread_cancel(dev->read_thread_tid);
 
 	free(dev);
-}
-
-size_t serial_read(serial_t *dev, void *data, size_t n){
-	return ringbuf_read(&dev->rx_buf, data, n);
 }
 
 void serial_cmd_start(serial_t *dev, char const *resp){
@@ -165,29 +152,36 @@ static void *read_thread(void *arg){
 
 		if(c == ':' && strncmp(line, "+IPD", 4) == 0){
 			line[i] = 0;
-			while(line[i] != ',' && i > 0)	i--;
-
-			i = atoi(line + i + 1);
-
-			recv(dev, i);
+			recv(dev, line, i);
+			i = 0;
 		}
 		else if(c == '\n'){
 			line[i] = 0;
+			parse_line(dev, line, i);
 			i = 0;
-
-			parse_line(line);
 		}
 	}
 
 	return 0x0;
 }
 
-static void parse_line(char const *line){
+static void parse_line(serial_t *dev, char *line, size_t len){
 	result_t r;
 
 
+	/* check for incoming connection */
+	if(strncmp(line + len - 9, ",CONNECT", 8) == 0){
+		accept(dev, line, len);
+		return;
+	}
+
+	if(strncmp(line + len - 8, ",CLOSED", 7) == 0){
+		closed(dev, line, len);
+		return;
+	}
 	r = RES_INVAL;
 
+	/* check for command response */
 	pthread_mutex_lock(&mtx);
 
 	if(response == 0x0 && strncmp(line, "OK", 2) == 0)					r = RES_OK;
@@ -203,14 +197,106 @@ static void parse_line(char const *line){
 	pthread_mutex_unlock(&mtx);
 }
 
-static void recv(serial_t *dev, size_t n){
-	char c;
+static void recv(serial_t *dev, char *line, size_t len){
+	size_t n,
+		   i;
+	int link_id;
+	sock_addr_inet_t remote;
 
 
-	for(;n>0; n--){
-		if(read(dev->fd, &c, 1) != 1)
+	remote.domain = AF_INET;
+
+	while(line[len] != ',' && len > 0)	len--;
+	remote.data.port = atoi(line + len + 1);
+	line[len] = 0;
+
+	while(line[len] != ',' && len > 0)	len--;
+	remote.data.addr = inet_addr(line + len + 1);
+	line[len] = 0;
+
+	while(line[len] != ',' && len > 0)	len--;
+	n = atoi(line + len + 1);
+	line[len] = 0;
+
+	while(line[len] != ',' && len > 0)	len--;
+	link_id = atoi(line + len + 1);
+
+	char s[n + 1];
+
+	for(i=0; i<n; i++){
+		if(read(dev->fd, s + i, 1) != 1)
+			break;
+	}
+
+	s[i] = 0;
+
+	dev->recv(dev->dev, link_id, s, i, &remote);
+}
+
+static void accept(serial_t *dev, char *line, size_t len){
+	size_t i;
+	char link_id[5];
+	sock_addr_inet_t remote;
+
+
+	i = 0;
+
+	while(line[i] != ',' && i < len)	i++;
+	line[i] = 0;
+	strncpy(link_id, line, 5);
+
+	write(dev->fd, "AT+CIPSTATUS\n", 13);
+
+	i = 0;
+
+	while(1){
+		if(read(dev->fd, line + i, 1) != 1)
 			break;
 
-		ringbuf_write(&dev->rx_buf, &c, 1);
+		if(opts.esp_debug){
+			printf("%c", line[i]);
+			fflush(stdout);
+		}
+
+		if(line[i] == '\n'){
+			line[i] = 0;
+
+			if(strcmp(line, "OK") == 0 || strcmp(line, "ERROR") == 0)
+				return;
+
+			if(strncmp(line, "+CIPSTATUS:", 11) == 0 && strncmp(line + 11, link_id, strlen(link_id)) == 0){
+				i = 20;
+				while(line[i] != '"')	i++;
+				line[i] = 0;
+
+				remote.domain = AF_INET;
+				remote.data.addr = inet_addr(line + 20);
+
+				line += i + 2;
+				i = 0;
+				while(line[i] != ',')	i++;
+				line[i] = 0;
+
+				remote.data.port = atoi(line);
+				dev->accept(dev->dev, atoi(link_id), &remote);
+			}
+
+			i = 0;
+		}
+		else
+			i++;
 	}
+}
+
+static void closed(serial_t *dev, char *line, size_t len){
+	size_t i;
+	int link_id;
+
+
+	i = 0;
+	while(line[i] != ',' && i < len)	i++;
+	line[i] = 0;
+	link_id = atoi(line);
+
+	dev->closed(dev->dev, link_id);
 }
