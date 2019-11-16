@@ -8,11 +8,14 @@
 
 /* types */
 typedef struct{
-	inet_dev_mode_t mode;
+	inet_dev_mode_t dev_mode;
 	sock_type_t type;
 
 	char *ssid,
 		 *password;
+
+	inet_addr_t ip;
+	int port;
 
 	int esp_debug;
 } opt_t;
