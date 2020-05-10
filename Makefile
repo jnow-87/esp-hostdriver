@@ -43,6 +43,9 @@ gperfflags := $(GPERFFLAGS) $(gperfflags)
 ## build
 ####
 .PHONY: all
+all: cflags += -g
+all: cxxflags += -g
+all: asflags += -g
 all: $(lib) $(bin)
 
 .PHONY: debug
