@@ -35,12 +35,12 @@ int file_map(const char *filename, int *_fd, void **_map, unsigned int *_size){
 	fd = open(filename, O_RDWR);
 
 	if(fd < 0){
-		fprintf(stderr, "fixdep: error opening file \"%s\": %s\n", filename, strerror(errno));
+		fprintf(stderr, "fixdep: open file \"%s\" failed %s\n", filename, strerror(errno));
 		return -1;
 	}
 
 	if(fstat(fd, &st) < 0){
-		fprintf(stderr, "fixdep: error fstat'ing file: %s\n", strerror(errno));
+		fprintf(stderr, "fixdep: error fstat'ing file \"%s\"\n", strerror(errno));
 		goto err;
 	}
 

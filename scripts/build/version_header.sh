@@ -40,7 +40,7 @@ EOL
 if  ! diff ${header} ${header}.tmp 1>/dev/null 2>&1 ;then
 	# update header
 	cp ${header}.tmp ${header}
-	echo "version header written to ${header}"
+	echo "generating version header \"${header}\""
 fi
 
 # delete temporary header
