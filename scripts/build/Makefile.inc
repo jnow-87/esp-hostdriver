@@ -12,7 +12,11 @@
 ######################################
 
 # invoke 'make prepare_deps' if it has not been done already
-ifneq ($(PREPARE_DONE),13)
+# use a key that identifies the local project, allowing to nest
+# projects that use this set of makefiles
+prepare_done_key := $(shell basename $$PWD)
+
+ifneq ($(PREPARE_DONE),$(prepare_done_key))
   # ensure MAKECMDGOALS is not empty, otherwise the following checks would not work
   # and prepare_deps would not be executed if no target is specified
   ifeq ($(MAKECMDGOALS),)
@@ -29,7 +33,7 @@ ifneq ($(PREPARE_DONE),13)
       $(error Mixing clean with other targets is not supported by the build system)
     endif
 
-    r := $(shell PREPARE_DONE=13 $(MAKE) $(MFLAGS) $(MAKEOVERRIDES) prepare_deps 1>&2; r=$$?; if [ "$$(echo $(MFLAGS) | grep 'q')" != "" ]; then echo 0; else echo $$r; fi)
+    r := $(shell PREPARE_DONE=$(prepare_done_key) $(MAKE) $(MFLAGS) $(MAKEOVERRIDES) prepare_deps 1>&2; r=$$?; if [ "$$(echo $(MFLAGS) | grep 'q')" != "" ]; then echo 0; else echo $$r; fi)
 
     # stop in case of an error during 'make prepare_deps'
     ifneq ($(r),0)
@@ -212,11 +216,11 @@ ifneq ("$(githooks_tree)","")
 .PHONY: githooks
 .SILENT: githooks
 githooks:
-	test -e "$(githooks_tree)/style" || (echo $(githooks_tree)/style does not exist; exit 1)
-	test -e "$(githooks_tree)/mantis" || (echo $(githooks_tree)/mantis does not exist; exit 1)
-	test -e "$(githooks_tree)/util_print" || (echo $(githooks_tree)/util_print does not exist; exit 1)
-	test -e "$(githooks_tree)/pre-commit" || (echo $(githooks_tree)/pre-commit does not exist; exit 1)
-	test -e "$(githooks_tree)/post-commit" || (echo $(githooks_tree)/post-commit does not exist; exit 1)
+	test -e "$(githooks_tree)/style" || { echo $(githooks_tree)/style does not exist; exit 1; }
+	test -e "$(githooks_tree)/mantis" || { echo $(githooks_tree)/mantis does not exist; exit 1; }
+	test -e "$(githooks_tree)/util_print" || { echo $(githooks_tree)/util_print does not exist; exit 1; }
+	test -e "$(githooks_tree)/pre-commit" || { echo $(githooks_tree)/pre-commit does not exist; exit 1; }
+	test -e "$(githooks_tree)/post-commit" || { echo $(githooks_tree)/post-commit does not exist; exit 1; }
 	ln -frs $(githooks_tree)/style .git/hooks/style
 	ln -frs $(githooks_tree)/mantis .git/hooks/mantis
 	ln -frs $(githooks_tree)/util_print .git/hooks/util_print
@@ -329,7 +333,7 @@ endif
 # update .clang file
 .PHONY: dotclang
 dotclang:
-	$(echo) $(cppflags) $(hostcppflags) | grep -o -e "-I[ \t]*[a-zA-Z0-9_/\.]*" > .clang
+	$(echo) $(cppflags) $(hostcppflags) | grep -o -e "-I[ \t]*[a-zA-Z0-9_/\.]*" > .clang || true
 
 # help for the build system
 help-buildsys:

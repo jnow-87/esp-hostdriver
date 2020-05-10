@@ -28,7 +28,7 @@ comma := ,
 #
 #	$(call dinclude,<directory list>)
 define dinclude
-	$(eval traverse := $(sort $(filter-out $(included),$(patsubst %/,%,$(1))))) \
+	$(eval traverse := $(call unique,$(filter-out $(included),$(patsubst %/,%,$(1))))) \
 	$(eval included += $(traverse)) \
 	\
 	$(foreach dir,$(traverse), \
@@ -170,6 +170,16 @@ endef
 define cond_ge
 $(shell test $1 -ge $2 && echo 1)
 endef
+
+# remove duplicates from string
+#
+# 	$(strip $(call unique,<string>))
+define unique
+	$(eval lst :=) \
+	$(foreach k,$(1),$(if $(filter $(k), $(lst)),,$(eval lst += $(k)))) \
+	$(lst)
+endef
+
 
 # set default value of variable <var> based on the following scheme
 #	if <var> is defined on the command-line
