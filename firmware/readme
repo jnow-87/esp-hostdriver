@@ -1,0 +1,24 @@
+*** Firmware Update
+	*** Prerequisites
+		- firmware
+			https://www.espressif.com/en/support/download/at
+			last tried: AT_Bin_V1.6
+			fallback: ESP_8266_BIN0.92.bin
+
+		- flash tool
+			esp8266_flasher for fallback firmware (single binary)
+			flash_download_tools for multi-binary
+
+	*** flash_download_tool
+		AT_BIN_V1.6/
+			bin/boot_v1.6.bin						0x00000
+			bin/at/512+512/user1.1024.new.2.bin		0x01000
+			bin/esp_init_data_default_v05.bin		0xfc000
+			bin/blank.bin							0x7e000
+			bin/blank.bin							0xfe000
+
+	*** esp8266 to uart connection
+		TX  <- RX  o o  3.3V -> VCC
+		GND <- IO  o o  RST
+		    <- IO  o o  EN   -> VCC
+		GND <- GND o o  TX   -> RX
